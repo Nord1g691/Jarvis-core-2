@@ -1,21 +1,25 @@
-"""JARVIS Core Assistant integration."""
+"""JARVIS Core 2 Home Assistant integration."""
+from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-DOMAIN = "jarvis"
+from .const import DOMAIN
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up JARVIS from YAML (no-op for now)."""
+    """Set up JARVIS Core 2."""
+    hass.data.setdefault(DOMAIN, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up JARVIS from a config entry."""
+    """Set up JARVIS Core 2 from a config entry."""
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload JARVIS."""
+    """Unload a JARVIS Core 2 config entry."""
+    hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return True
