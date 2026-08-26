@@ -1,0 +1,11 @@
+{
+  "domain": "jarvis",
+  "name": "JARVIS Core Assistant",
+  "version": "0.1.0",
+  "documentation": "https://github.com/Nord1g691/Jarvis-core-2",
+  "issue_tracker": "https://github.com/Nord1g691/Jarvis-core-2/issues",
+  "codeowners": ["@Nord1g691"],
+  "config_flow": true,
+  "iot_class": "local_push",
+  "requirements": []
+}
