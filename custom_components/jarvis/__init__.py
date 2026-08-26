@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from homeassistant.components import panel_custom
+from homeassistant.components.frontend import (
+    add_extra_js_url,
+    async_register_built_in_panel,
+)
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -12,37 +15,43 @@ from .const import DOMAIN
 
 FRONTEND_URL = "/jarvis_core"
 FRONTEND_FILE = f"{FRONTEND_URL}/jarvis-core.js"
-PANEL_NAME = "jarvis-core-panel"
+PANEL_URL = "jarvis"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up JARVIS Core 2."""
+    """Set up JARVIS Core 2 and register its sidebar panel."""
     hass.data.setdefault(DOMAIN, {})
+    frontend_dir = Path(__file__).parent / "frontend"
 
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
                 FRONTEND_URL,
-                str(Path(__file__).parent / "frontend"),
+                str(frontend_dir),
                 cache_headers=False,
             )
         ]
     )
 
-    # JARVIS is a real Home Assistant sidebar panel. The HUD is loaded
-    # only when the user opens the JARVIS entry in the sidebar.
-    if DOMAIN not in hass.data.get("frontend_panels", {}):
-        await panel_custom.async_register_panel(
-            hass=hass,
-            webcomponent_name=PANEL_NAME,
-            frontend_url_path=DOMAIN,
-            module_url=FRONTEND_FILE,
-            sidebar_title="JARVIS",
-            sidebar_icon="mdi:robot-outline",
-            require_admin=False,
-            config={},
-        )
+    add_extra_js_url(hass, FRONTEND_FILE)
 
+    async_register_built_in_panel(
+        hass,
+        component_name="custom",
+        sidebar_title="JARVIS",
+        sidebar_icon="mdi:robot-outline",
+        frontend_url_path=PANEL_URL,
+        config={
+            "_panel_custom": {
+                "name": "jarvis-core-hud",
+                "module_url": FRONTEND_FILE,
+                "embed_iframe": False,
+                "trust_external": False,
+            }
+        },
+        require_admin=False,
+        update=True,
+    )
     return True
 
 
