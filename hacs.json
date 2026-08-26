@@ -1,6 +1,4 @@
 {
   "name": "JARVIS Core Assistant",
-  "content_in_root": true,
-  "filename": "jarvis",
   "render_readme": true
 }
