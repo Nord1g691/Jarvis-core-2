@@ -1,0 +1,8 @@
+JARVIS Core Assistant
+Test version: 0.2.0-test.1
+
+Test scope:
+- Sidebar JARVIS panel
+- 72 LED HUD
+- Voice button
+- Assist test button
