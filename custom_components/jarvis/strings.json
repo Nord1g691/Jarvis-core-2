@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "JARVIS Core Assistant",
+        "description": "Initialiser JARVIS Core 2 dans Home Assistant."
+      }
+    }
+  }
+}
