@@ -23,6 +23,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         [StaticPathConfig(FRONTEND_URL, str(frontend_dir), cache_headers=False)]
     )
     add_extra_js_url(hass, FRONTEND_FILE)
+    add_extra_js_url(hass, f"{FRONTEND_URL}/jarvis-agent.js")
     async_register_built_in_panel(
         hass,
         component_name="custom",
