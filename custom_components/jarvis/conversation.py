@@ -26,13 +26,13 @@ class JarvisConversationView(HomeAssistantView):
         if not text:
             return self.json_message("Missing text", status_code=400)
 
-        payload = {"text": text, "language": "fr-FR"}
+        # Do not force an agent or locale. Home Assistant uses the configured
+        # Assist agent and language for this installation.
+        payload = {"text": text}
         conversation_id = data.get("conversation_id")
         if isinstance(conversation_id, str) and conversation_id.strip():
             payload["conversation_id"] = conversation_id.strip()
 
-        # No agent_id is supplied intentionally: Home Assistant Assist uses
-        # the configured/default conversation agent for this installation.
         try:
             result = await self.hass.services.async_call(
                 "conversation",
