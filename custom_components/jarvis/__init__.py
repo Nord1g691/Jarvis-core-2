@@ -7,8 +7,12 @@ from homeassistant.components.frontend import add_extra_js_url, async_register_b
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
+from homeassistant.loader import async_get_loaded_integration
 
 from .const import DOMAIN, FRONTEND_FILE, FRONTEND_URL, PANEL_URL
+
+PLATFORMS = ["sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -44,10 +48,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up JARVIS Core 2 from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a JARVIS Core 2 config entry."""
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    return True
+    return unloaded
