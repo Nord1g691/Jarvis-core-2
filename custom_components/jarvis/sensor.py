@@ -28,6 +28,8 @@ TARGETS = {
 
 
 def _score(state, keywords: tuple[str, ...]) -> int:
+    if state.entity_id.startswith("sensor.jarvis_"):
+        return -100
     attrs = state.attributes
     unit = str(attrs.get("unit_of_measurement", "")).lower()
     device_class = str(attrs.get("device_class", "")).lower()
@@ -35,15 +37,9 @@ def _score(state, keywords: tuple[str, ...]) -> int:
         return -100
     if unit not in {"w", "kw"} and device_class != "power":
         return -100
-    text = " ".join(
-        str(attrs.get(k, "")) for k in ("friendly_name", "name", "device_class")
-    ).lower()
+    text = " ".join(str(attrs.get(k, "")) for k in ("friendly_name", "name", "device_class")).lower()
     text += " " + state.entity_id.lower()
-    score = 1
-    if device_class == "power":
-        score += 4
-    if unit in {"w", "kw"}:
-        score += 2
+    score = 1 + (4 if device_class == "power" else 0) + (2 if unit in {"w", "kw"} else 0)
     for keyword in keywords:
         if keyword in text:
             score += 5
@@ -62,12 +58,9 @@ def _discover(hass: HomeAssistant) -> dict[str, str | None]:
     return result
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
-) -> None:
-    """Create four read-only JARVIS power sensors using automatic discovery."""
-    entities = [JarvisPowerSensor(hass, entry.entry_id, key) for key in TARGETS]
-    async_add_entities(entities)
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+    """Create read-only JARVIS power sensors using automatic discovery."""
+    async_add_entities([JarvisPowerSensor(hass, entry.entry_id, key) for key in TARGETS], update_before_add=True)
 
 
 class JarvisPowerSensor(SensorEntity):
@@ -83,12 +76,7 @@ class JarvisPowerSensor(SensorEntity):
         self._key = key
         self._source: str | None = None
         self._attr_unique_id = f"{entry_id}_{key}_power"
-        self._attr_name = {
-            "production": "Solar production",
-            "consumption": "Home consumption",
-            "import": "Grid import",
-            "export": "Grid export",
-        }[key]
+        self._attr_name = {"production": "Solar production", "consumption": "Home consumption", "import": "Grid import", "export": "Grid export"}[key]
         self._attr_native_value = None
 
     async def async_added_to_hass(self) -> None:
@@ -100,20 +88,14 @@ class JarvisPowerSensor(SensorEntity):
             self._refresh_source()
             self.async_write_ha_state()
 
-        self.async_on_remove(
-            async_track_state_change_event(
-                self.hass,
-                list(self.hass.states.async_entity_ids("sensor")),
-                _changed,
-            )
-        )
+        self.async_on_remove(async_track_state_change_event(self.hass, list(self.hass.states.async_entity_ids("sensor")), _changed))
 
     def _refresh_source(self) -> None:
-        sources = _discover(self.hass)
-        self._source = sources.get(self._key)
+        self._source = _discover(self.hass).get(self._key)
         state = self.hass.states.get(self._source) if self._source else None
         if state is None:
             self._attr_native_value = None
+            self._attr_extra_state_attributes = {"auto_discovered": False}
             return
         try:
             value = float(state.state)
@@ -122,10 +104,7 @@ class JarvisPowerSensor(SensorEntity):
             return
         unit = str(state.attributes.get("unit_of_measurement", "W")).lower()
         self._attr_native_value = value * 1000 if unit == "kw" else value
-        self._attr_extra_state_attributes = {
-            "source_entity": self._source,
-            "auto_discovered": True,
-        }
+        self._attr_extra_state_attributes = {"source_entity": self._source, "auto_discovered": True}
 
     async def async_update(self) -> None:
         self._refresh_source()
