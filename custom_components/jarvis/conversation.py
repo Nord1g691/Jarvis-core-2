@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from aiohttp import web
+from homeassistant.components import assist_pipeline
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
 
 class JarvisConversationView(HomeAssistantView):
-    """Route HUD conversation requests through the JARVIS Core."""
+    """Route HUD conversation requests through the preferred Assist pipeline."""
 
     url = "/api/jarvis/conversation"
     name = "api:jarvis:conversation"
@@ -26,14 +27,29 @@ class JarvisConversationView(HomeAssistantView):
         if not text:
             return self.json_message("Missing text", status_code=400)
 
-        # Do not force an agent or locale. Home Assistant uses the configured
-        # Assist agent and language for this installation.
-        payload = {"text": text}
         conversation_id = data.get("conversation_id")
-        if isinstance(conversation_id, str) and conversation_id.strip():
-            payload["conversation_id"] = conversation_id.strip()
+        if not isinstance(conversation_id, str) or not conversation_id.strip():
+            conversation_id = None
+        else:
+            conversation_id = conversation_id.strip()
 
         try:
+            # "preferred" here is the Assist pipeline selected by the user in
+            # Home Assistant. Its conversation_engine is the assistant/LLM
+            # that should actually answer JARVIS, rather than the default
+            # built-in home_assistant conversation agent.
+            pipeline = assist_pipeline.async_get_pipeline(self.hass)
+            agent_id = pipeline.conversation_engine
+            if not agent_id:
+                return self.json_message(
+                    "Preferred Assist pipeline has no conversation engine",
+                    status_code=502,
+                )
+
+            payload = {"text": text, "agent_id": agent_id}
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+
             result = await self.hass.services.async_call(
                 "conversation",
                 "process",
@@ -57,6 +73,11 @@ class JarvisConversationView(HomeAssistantView):
             {
                 "speech": speech,
                 "conversation_id": new_conversation_id,
-                "continue_conversation": response.get("continue_conversation", False) if isinstance(response, dict) else False,
+                "agent_id": agent_id,
+                "continue_conversation": (
+                    response.get("continue_conversation", False)
+                    if isinstance(response, dict)
+                    else False
+                ),
             }
         )
