@@ -4,6 +4,7 @@ DOMAIN = "jarvis"
 PANEL_URL = "jarvis"
 FRONTEND_URL = "/jarvis_core"
 FRONTEND_FILE = f"{FRONTEND_URL}/jarvis-core.js"
+PREFERRED_ASSIST_FILE = f"{FRONTEND_URL}/jarvis-preferred-assist.js"
 
 # Existing Home Assistant entities used by the HUD.
 ENERGY_ENTITIES = {
