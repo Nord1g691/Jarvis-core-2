@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 
 
 class JarvisConversationView(HomeAssistantView):
-    """Route HUD conversation requests through the best configured Assist agent."""
+    """Route HUD conversation requests through a selectable Assist pipeline."""
 
     url = "/api/jarvis/conversation"
     name = "api:jarvis:conversation"
@@ -18,41 +18,23 @@ class JarvisConversationView(HomeAssistantView):
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
-    def _select_agent(self) -> tuple[str | None, str]:
-        """Select the configured conversation agent without hard-coding a provider."""
-        preferred = assist_pipeline.async_get_pipeline(self.hass)
-        preferred_agent = preferred.conversation_engine
+    def _pipelines(self):
+        return assist_pipeline.async_get_pipelines(self.hass)
 
-        # Assist's preferred pipeline is authoritative when it already points
-        # to a non-built-in conversation engine.
-        if preferred_agent and preferred_agent != conversation.HOME_ASSISTANT_AGENT:
+    def _select_agent(self, requested_pipeline: str | None = None):
+        pipelines = self._pipelines()
+        preferred = assist_pipeline.async_get_pipeline(self.hass)
+
+        if requested_pipeline:
+            for pipeline in pipelines:
+                if pipeline.id == requested_pipeline or pipeline.name == requested_pipeline:
+                    return pipeline.conversation_engine, pipeline.name
+
+        preferred_agent = preferred.conversation_engine
+        if preferred_agent:
             return preferred_agent, preferred.name
 
-        # Some conversation integrations register their agent directly with the
-        # conversation AgentManager and may not be represented by a separate
-        # Assist pipeline. Discover those agents dynamically.
-        manager = get_agent_manager(self.hass)
-        agents = [
-            info
-            for info in manager.async_get_agent_info()
-            if info.id != conversation.HOME_ASSISTANT_AGENT
-        ]
-
-        # If there is exactly one installed custom conversation agent, it is the
-        # unambiguous automatic choice. This covers providers such as cloud LLM
-        # conversation integrations without hard-coding their entity/domain.
-        if len(agents) == 1:
-            return agents[0].id, agents[0].name
-
-        # If several agents exist, prefer one referenced by any configured
-        # pipeline. This avoids guessing between multiple providers.
-        for pipeline in assist_pipeline.async_get_pipelines(self.hass):
-            agent_id = pipeline.conversation_engine
-            if agent_id and agent_id != conversation.HOME_ASSISTANT_AGENT:
-                return agent_id, pipeline.name
-
-        # No custom agent is available: preserve HA's normal fallback.
-        return preferred_agent, preferred.name
+        return conversation.HOME_ASSISTANT_AGENT, preferred.name
 
     async def post(self, request: web.Request) -> web.Response:
         try:
@@ -70,14 +52,12 @@ class JarvisConversationView(HomeAssistantView):
         else:
             conversation_id = conversation_id.strip()
 
-        try:
-            agent_id, pipeline_name = self._select_agent()
-            if not agent_id:
-                return self.json_message(
-                    "No Assist conversation engine is configured",
-                    status_code=502,
-                )
+        requested_pipeline = data.get("pipeline")
+        if requested_pipeline is not None:
+            requested_pipeline = str(requested_pipeline).strip() or None
 
+        try:
+            agent_id, pipeline_name = self._select_agent(requested_pipeline)
             payload = {"text": text, "agent_id": agent_id}
             if conversation_id:
                 payload["conversation_id"] = conversation_id
@@ -104,6 +84,10 @@ class JarvisConversationView(HomeAssistantView):
                 "conversation_id": new_conversation_id,
                 "agent_id": agent_id,
                 "pipeline_name": pipeline_name,
+                "pipelines": [
+                    {"id": p.id, "name": p.name, "conversation_engine": p.conversation_engine}
+                    for p in self._pipelines()
+                ],
                 "continue_conversation": (
                     response.get("continue_conversation", False)
                     if isinstance(response, dict)
