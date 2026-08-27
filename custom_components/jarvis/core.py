@@ -1,45 +1,50 @@
 """Central JARVIS conversation core."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components import conversation
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 
 from .const import DOMAIN
 
 
-def _pick_agent(hass: HomeAssistant) -> str | None:
-    """Pick the first configured conversation agent, preferring a JARVIS-named one."""
-    candidates: list[str] = []
-    for state in hass.states.async_all("conversation"):
-        candidates.append(state.entity_id)
-    candidates.sort(key=lambda x: ("jarvis" not in x.lower(), x))
-    return candidates[0] if candidates else None
+async def async_process(
+    hass: HomeAssistant,
+    text: str,
+    language: str = "fr",
+    context: Context | None = None,
+) -> dict[str, Any]:
+    """Send text through Home Assistant's configured Assist conversation agent.
 
-
-async def async_process(hass: HomeAssistant, text: str, language: str = "fr") -> dict:
-    """Send text through the configured Home Assistant Assist conversation agent."""
-    agent_id = _pick_agent(hass)
-    if not agent_id:
-        return {"success": False, "error": "no_conversation_agent", "speech": None}
-
+    JARVIS deliberately does not hard-code Google, OpenAI, or another provider.
+    The Assist conversation API chooses the installation's default agent when
+    ``agent_id`` is omitted.
+    """
+    data = hass.data.setdefault(DOMAIN, {})
     try:
         result = await conversation.async_converse(
             hass,
             text=text,
-            context=None,
-            conversation_id=hass.data.setdefault(DOMAIN, {}).get("conversation_id"),
+            context=context,
+            conversation_id=data.get("conversation_id"),
             device_id=None,
             language=language,
-            agent_id=agent_id,
+            agent_id=None,
         )
     except Exception as err:  # noqa: BLE001
-        return {"success": False, "error": str(err), "agent_id": agent_id, "speech": None}
+        return {"success": False, "error": str(err), "speech": None}
 
-    hass.data.setdefault(DOMAIN, {})["conversation_id"] = result.conversation_id
-    speech = result.response.speech.get("plain", {}).get("speech") if result.response.speech else None
+    data["conversation_id"] = result.conversation_id
+    speech = None
+    if result.response.speech:
+        plain = result.response.speech.get("plain")
+        if plain:
+            speech = plain.get("speech")
+
     return {
         "success": True,
-        "agent_id": agent_id,
         "conversation_id": result.conversation_id,
+        "continue_conversation": result.continue_conversation,
         "speech": speech,
     }
