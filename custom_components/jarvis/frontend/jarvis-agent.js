@@ -62,7 +62,7 @@
       if (!token || !text) return;
       this.setState("JARVIS RÉFLÉCHIT", "#ffb000");
       try {
-        const body = { text } };
+        const body = { text };
         const selected = localStorage.getItem("jarvis_assist_pipeline") || "";
         if (selected) body.pipeline = selected;
         if (this.conversationId) body.conversation_id = this.conversationId;
