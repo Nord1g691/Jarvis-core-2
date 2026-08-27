@@ -5,8 +5,6 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
-
 
 class JarvisConversationView(HomeAssistantView):
     """Route HUD conversation requests through the JARVIS Core."""
@@ -28,10 +26,10 @@ class JarvisConversationView(HomeAssistantView):
         if not text:
             return self.json_message("Missing text", status_code=400)
 
-        payload = {"text": text, "language": data.get("language", "fr")}
+        payload = {"text": text, "language": "fr-FR"}
         conversation_id = data.get("conversation_id")
-        if conversation_id:
-            payload["conversation_id"] = conversation_id
+        if isinstance(conversation_id, str) and conversation_id.strip():
+            payload["conversation_id"] = conversation_id.strip()
 
         # No agent_id is supplied intentionally: Home Assistant Assist uses
         # the configured/default conversation agent for this installation.
@@ -47,13 +45,18 @@ class JarvisConversationView(HomeAssistantView):
             return self.json_message(f"Assist error: {err}", status_code=502)
 
         response = result or {}
-        speech = response.get("response", {}).get("speech", {}).get("plain", {}).get("speech")
-        new_conversation_id = response.get("conversation_id") or conversation_id
+        response_data = response.get("response", {}) if isinstance(response, dict) else {}
+        speech_data = response_data.get("speech", {}) if isinstance(response_data, dict) else {}
+        plain = speech_data.get("plain", {}) if isinstance(speech_data, dict) else {}
+        speech = plain.get("speech") if isinstance(plain, dict) else None
+        new_conversation_id = response.get("conversation_id") if isinstance(response, dict) else None
+        if not new_conversation_id:
+            new_conversation_id = conversation_id
+
         return self.json(
             {
                 "speech": speech,
                 "conversation_id": new_conversation_id,
-                "continue_conversation": response.get("continue_conversation", False),
-                "raw": response,
+                "continue_conversation": response.get("continue_conversation", False) if isinstance(response, dict) else False,
             }
         )
