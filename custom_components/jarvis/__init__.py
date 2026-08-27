@@ -24,6 +24,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     )
     add_extra_js_url(hass, FRONTEND_FILE)
     add_extra_js_url(hass, f"{FRONTEND_URL}/jarvis-agent.js")
+    add_extra_js_url(hass, f"{FRONTEND_URL}/jarvis-preferred-assist.js")
     async_register_built_in_panel(
         hass,
         component_name="custom",
@@ -52,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a JARVIS Core 2 config entry."""
+    """Unload JARVIS Core 2 from a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unloaded
