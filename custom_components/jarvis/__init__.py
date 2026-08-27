@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, FRONTEND_FILE, FRONTEND_URL, PANEL_URL
+from .conversation import JarvisConversationView
 
 PLATFORMS = ["sensor"]
 
@@ -16,6 +17,7 @@ PLATFORMS = ["sensor"]
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up JARVIS Core 2 and register its sidebar panel."""
     hass.data.setdefault(DOMAIN, {})
+    hass.http.register_view(JarvisConversationView(hass))
     frontend_dir = Path(__file__).parent / "frontend"
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_URL, str(frontend_dir), cache_headers=False)]
