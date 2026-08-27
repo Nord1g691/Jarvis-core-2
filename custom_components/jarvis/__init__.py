@@ -7,8 +7,6 @@ from homeassistant.components.frontend import add_extra_js_url, async_register_b
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
-from homeassistant.loader import async_get_loaded_integration
 
 from .const import DOMAIN, FRONTEND_FILE, FRONTEND_URL, PANEL_URL
 
@@ -19,12 +17,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up JARVIS Core 2 and register its sidebar panel."""
     hass.data.setdefault(DOMAIN, {})
     frontend_dir = Path(__file__).parent / "frontend"
-
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_URL, str(frontend_dir), cache_headers=False)]
     )
     add_extra_js_url(hass, FRONTEND_FILE)
-
     async_register_built_in_panel(
         hass,
         component_name="custom",
