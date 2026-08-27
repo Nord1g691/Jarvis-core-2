@@ -34,10 +34,8 @@ class JarvisConversationView(HomeAssistantView):
             conversation_id = conversation_id.strip()
 
         try:
-            # "preferred" here is the Assist pipeline selected by the user in
-            # Home Assistant. Its conversation_engine is the assistant/LLM
-            # that should actually answer JARVIS, rather than the default
-            # built-in home_assistant conversation agent.
+            # Use the Assist pipeline selected as preferred by the user.
+            # Its conversation_engine is the configured AI/conversation agent.
             pipeline = assist_pipeline.async_get_pipeline(self.hass)
             agent_id = pipeline.conversation_engine
             if not agent_id:
@@ -62,16 +60,15 @@ class JarvisConversationView(HomeAssistantView):
 
         response = result or {}
         response_data = response.get("response", {}) if isinstance(response, dict) else {}
-        speech_data = response_data.get("speech", {}) if isinstance(response_data, dict) else {}
-        plain = speech_data.get("plain", {}) if isinstance(speech_data, dict) else {}
-        speech = plain.get("speech") if isinstance(plain, dict) else None
         new_conversation_id = response.get("conversation_id") if isinstance(response, dict) else None
         if not new_conversation_id:
             new_conversation_id = conversation_id
 
+        # Keep the same response shape as Home Assistant's official
+        # /api/conversation/process endpoint so the HUD needs no special parser.
         return self.json(
             {
-                "speech": speech,
+                "response": response_data,
                 "conversation_id": new_conversation_id,
                 "agent_id": agent_id,
                 "continue_conversation": (
