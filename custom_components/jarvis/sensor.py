@@ -21,13 +21,14 @@ class _Candidate:
 
 TARGETS = {
     "production": ("solar", "solaire", "production", "photovolta", "pv", "produit"),
-    "consumption": ("consumption", "consommation", "maison", "house", "home", "load"),
-    "import": ("import", "importation", "grid import", "réseau import"),
-    "export": ("export", "exportation", "grid export", "réseau export", "injection"),
+    "consumption": ("consumption", "consommation", "maison", "house", "home", "load", "total"),
+    "import": ("import", "importation", "grid import", "réseau import", "from grid"),
+    "export": ("export", "exportation", "grid export", "réseau export", "injection", "to grid"),
 }
 
 
 def _score(state, keywords: tuple[str, ...]) -> int:
+    """Score a sensor without assuming a vendor-specific entity_id."""
     if state.entity_id.startswith("sensor.jarvis_"):
         return -100
     attrs = state.attributes
@@ -39,7 +40,7 @@ def _score(state, keywords: tuple[str, ...]) -> int:
         return -100
     text = " ".join(str(attrs.get(k, "")) for k in ("friendly_name", "name", "device_class")).lower()
     text += " " + state.entity_id.lower()
-    score = 1 + (4 if device_class == "power" else 0) + (2 if unit in {"w", "kw"} else 0)
+    score = 1 + (6 if device_class == "power" else 0) + (3 if unit in {"w", "kw"} else 0)
     for keyword in keywords:
         if keyword in text:
             score += 5
@@ -47,20 +48,32 @@ def _score(state, keywords: tuple[str, ...]) -> int:
 
 
 def _discover(hass: HomeAssistant) -> dict[str, str | None]:
+    """Find the best distinct source for each JARVIS metric."""
+    states = [s for s in hass.states.async_all("sensor") if not s.entity_id.startswith("sensor.jarvis_")]
     result: dict[str, str | None] = {}
-    for target, keywords in TARGETS.items():
+    used: set[str] = set()
+    # Explicitly prefer the most specific metrics first so a generic power
+    # sensor cannot steal a more appropriate import/export/solar source.
+    for target in ("production", "import", "export", "consumption"):
         best = _Candidate()
-        for state in hass.states.async_all("sensor"):
-            score = _score(state, keywords)
-            if score > best.score:
+        for state in states:
+            if state.entity_id in used:
+                continue
+            score = _score(state, TARGETS[target])
+            if score > best.score or (score == best.score and best.entity_id and state.entity_id < best.entity_id):
                 best = _Candidate(state.entity_id, score)
-        result[target] = best.entity_id if best.score >= 8 else None
+        result[target] = best.entity_id if best.score >= 10 else None
+        if result[target]:
+            used.add(result[target])
     return result
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Create read-only JARVIS power sensors using automatic discovery."""
-    async_add_entities([JarvisPowerSensor(hass, entry.entry_id, key) for key in TARGETS], update_before_add=True)
+    async_add_entities(
+        [JarvisPowerSensor(hass, entry.entry_id, key) for key in TARGETS],
+        update_before_add=True,
+    )
 
 
 class JarvisPowerSensor(SensorEntity):
@@ -76,7 +89,12 @@ class JarvisPowerSensor(SensorEntity):
         self._key = key
         self._source: str | None = None
         self._attr_unique_id = f"{entry_id}_{key}_power"
-        self._attr_name = {"production": "Solar production", "consumption": "Home consumption", "import": "Grid import", "export": "Grid export"}[key]
+        self._attr_name = {
+            "production": "Solar production",
+            "consumption": "Home consumption",
+            "import": "Grid import",
+            "export": "Grid export",
+        }[key]
         self._attr_native_value = None
 
     async def async_added_to_hass(self) -> None:
@@ -85,12 +103,22 @@ class JarvisPowerSensor(SensorEntity):
 
         @callback
         def _changed(_event) -> None:
+            old_source = self._source
             self._refresh_source()
-            self.async_write_ha_state()
+            # Only publish when the selected source/value may have changed.
+            if old_source != self._source or self._attr_native_value is not None:
+                self.async_write_ha_state()
 
-        self.async_on_remove(async_track_state_change_event(self.hass, list(self.hass.states.async_entity_ids("sensor")), _changed))
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass,
+                [s.entity_id for s in self.hass.states.async_all("sensor")],
+                _changed,
+            )
+        )
 
     def _refresh_source(self) -> None:
+        """Refresh source selection and normalize kW to W."""
         self._source = _discover(self.hass).get(self._key)
         state = self.hass.states.get(self._source) if self._source else None
         if state is None:
@@ -101,10 +129,17 @@ class JarvisPowerSensor(SensorEntity):
             value = float(state.state)
         except (TypeError, ValueError):
             self._attr_native_value = None
+            self._attr_extra_state_attributes = {
+                "source_entity": self._source,
+                "auto_discovered": True,
+            }
             return
         unit = str(state.attributes.get("unit_of_measurement", "W")).lower()
         self._attr_native_value = value * 1000 if unit == "kw" else value
-        self._attr_extra_state_attributes = {"source_entity": self._source, "auto_discovered": True}
+        self._attr_extra_state_attributes = {
+            "source_entity": self._source,
+            "auto_discovered": True,
+        }
 
     async def async_update(self) -> None:
         self._refresh_source()
