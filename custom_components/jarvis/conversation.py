@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from aiohttp import web
 from homeassistant.components import assist_pipeline, conversation
+from homeassistant.components.conversation.agent_manager import get_agent_manager
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
@@ -17,19 +18,40 @@ class JarvisConversationView(HomeAssistantView):
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
-    def _select_agent(self):
-        """Select the configured AI agent without hard-coding a provider."""
+    def _select_agent(self) -> tuple[str | None, str]:
+        """Select the configured conversation agent without hard-coding a provider."""
         preferred = assist_pipeline.async_get_pipeline(self.hass)
         preferred_agent = preferred.conversation_engine
+
+        # Assist's preferred pipeline is authoritative when it already points
+        # to a non-built-in conversation engine.
         if preferred_agent and preferred_agent != conversation.HOME_ASSISTANT_AGENT:
             return preferred_agent, preferred.name
 
-        pipelines = assist_pipeline.async_get_pipelines(self.hass)
-        for pipeline in pipelines:
+        # Some conversation integrations register their agent directly with the
+        # conversation AgentManager and may not be represented by a separate
+        # Assist pipeline. Discover those agents dynamically.
+        manager = get_agent_manager(self.hass)
+        agents = [
+            info
+            for info in manager.async_get_agent_info()
+            if info.id != conversation.HOME_ASSISTANT_AGENT
+        ]
+
+        # If there is exactly one installed custom conversation agent, it is the
+        # unambiguous automatic choice. This covers providers such as cloud LLM
+        # conversation integrations without hard-coding their entity/domain.
+        if len(agents) == 1:
+            return agents[0].id, agents[0].name
+
+        # If several agents exist, prefer one referenced by any configured
+        # pipeline. This avoids guessing between multiple providers.
+        for pipeline in assist_pipeline.async_get_pipelines(self.hass):
             agent_id = pipeline.conversation_engine
             if agent_id and agent_id != conversation.HOME_ASSISTANT_AGENT:
                 return agent_id, pipeline.name
 
+        # No custom agent is available: preserve HA's normal fallback.
         return preferred_agent, preferred.name
 
     async def post(self, request: web.Request) -> web.Response:
