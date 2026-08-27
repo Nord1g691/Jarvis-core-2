@@ -27,19 +27,12 @@
     };
 
     C.prototype._loadAssistPipelines = async function () {
-      const token = this._hass?.auth?.data?.access_token;
       const select = this.shadowRoot?.getElementById("pipelineSelect");
       const info = this.shadowRoot?.getElementById("pipelineInfo");
-      if (!token || !select) return;
+      if (!select || !this._hass) return;
       try {
-        const r = await fetch(location.origin + "/api/jarvis/conversation", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-          body: JSON.stringify({ text: "__jarvis_pipeline_probe__" }),
-        });
-        const d = await r.json();
-        if (!r.ok) throw Error(d?.message || d?.error || ("HTTP " + r.status));
-        const pipelines = Array.isArray(d.pipelines) ? d.pipelines : [];
+        const result = await this._hass.callWS({ type: "assist_pipeline/pipeline/list" });
+        const pipelines = Array.isArray(result?.pipelines) ? result.pipelines : [];
         for (const p of pipelines) {
           if (!p?.id) continue;
           const o = document.createElement("option");
@@ -49,8 +42,8 @@
         }
         const saved = localStorage.getItem("jarvis_assist_pipeline") || "";
         select.value = [...select.options].some(o => o.value === saved) ? saved : "";
-        info.textContent = pipelines.length ? `${pipelines.length} pipeline(s) Assist détecté(s)` : "Aucun pipeline supplémentaire détecté";
-        this._log?.("✓ Assist · " + (d.pipeline_name || "Automatique"));
+        info.textContent = pipelines.length ? `${pipelines.length} pipeline(s) Assist détecté(s)` : "Aucun pipeline Assist détecté";
+        this._log?.("✓ Assist · " + (pipelines.length ? pipelines.length + " pipeline(s) détecté(s)" : "aucun pipeline"));
       } catch (e) {
         info.textContent = "Détection Assist indisponible";
         this._log?.("⚠️ Pipeline Assist · " + e.message);
@@ -93,6 +86,15 @@
         setTimeout(() => this.conversationMode && this.setState("JARVIS ÉCOUTE", "#39ff88"), 1000);
       }
     };
+
+    // The HUD may already be rendered when this extra JS module loads.
+    // Re-run the patched render on existing instances so the selector appears immediately.
+    queueMicrotask(() => {
+      document.querySelectorAll("jarvis-core-hud").forEach((el) => {
+        try { el.render(); } catch (_) {}
+      });
+    });
+
     return true;
   };
   if (!patch()) {
