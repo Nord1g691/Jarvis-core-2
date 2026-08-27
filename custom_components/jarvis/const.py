@@ -14,3 +14,9 @@ ENERGY_ENTITIES = {
 }
 
 SATELLITE_ENTITY = "assist_satellite.jarvis_iphone"
+
+# Display/decision thresholds only. These values do not switch any device.
+SOLAR_MAX_W = 7000
+SURPLUS_ON_W = 1500
+SURPLUS_OFF_W = 500
+REFRESH_SECONDS = 5
