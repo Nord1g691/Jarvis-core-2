@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -20,30 +21,51 @@ class _Candidate:
 
 
 TARGETS = {
-    "production": ("solar", "solaire", "production", "photovolta", "pv", "produit"),
-    "consumption": ("consumption", "consommation", "maison", "house", "home", "load", "total"),
-    "import": ("import", "importation", "grid import", "réseau import", "from grid"),
-    "export": ("export", "exportation", "grid export", "réseau export", "injection", "to grid"),
+    "production": ("solar", "solaire", "production", "photovolta", "pv", "produit", "produced"),
+    "consumption": ("consumption", "consommation", "maison", "house", "home", "load", "total", "usage", "consumed"),
+    "import": ("import", "importation", "grid import", "réseau import", "from grid", "net import"),
+    "export": ("export", "exportation", "grid export", "réseau export", "injection", "to grid", "net export"),
 }
 
 
+def _norm(value: object) -> str:
+    text = str(value).lower()
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
 def _score(state, keywords: tuple[str, ...]) -> int:
-    """Score a sensor without assuming a vendor-specific entity_id."""
+    """Score a power sensor using HA metadata and common Envoy terminology."""
     if state.entity_id.startswith("sensor.jarvis_"):
         return -100
     attrs = state.attributes
-    unit = str(attrs.get("unit_of_measurement", "")).lower()
-    device_class = str(attrs.get("device_class", "")).lower()
+    unit = _norm(attrs.get("unit_of_measurement", ""))
+    device_class = _norm(attrs.get("device_class", ""))
+    state_class = _norm(attrs.get("state_class", ""))
+    # A power sensor should explicitly advertise power, W/kW, or both.
     if device_class not in {"power", ""} and unit not in {"w", "kw"}:
         return -100
     if unit not in {"w", "kw"} and device_class != "power":
         return -100
-    text = " ".join(str(attrs.get(k, "")) for k in ("friendly_name", "name", "device_class")).lower()
-    text += " " + state.entity_id.lower()
-    score = 1 + (6 if device_class == "power" else 0) + (3 if unit in {"w", "kw"} else 0)
+
+    text = " ".join(
+        _norm(attrs.get(k, ""))
+        for k in ("friendly_name", "name", "device_class", "state_class")
+    ) + " " + _norm(state.entity_id)
+    score = 1 + (10 if device_class == "power" else 0) + (4 if unit in {"w", "kw"} else 0)
+
     for keyword in keywords:
-        if keyword in text:
-            score += 5
+        kw = _norm(keyword)
+        if kw and kw in text:
+            score += 8
+
+    # Strong hints for common Enphase/Envoy naming.
+    if any(x in text for x in ("envoy", "enphase")):
+        score += 4
+
+    # Avoid selecting energy (kWh) or frequency/voltage sensors that happen
+    # to have a power-looking name.
+    if any(x in text for x in ("energy", "kwh", "voltage", "current", "frequency")):
+        score -= 20
     return score
 
 
@@ -52,8 +74,6 @@ def _discover(hass: HomeAssistant) -> dict[str, str | None]:
     states = [s for s in hass.states.async_all("sensor") if not s.entity_id.startswith("sensor.jarvis_")]
     result: dict[str, str | None] = {}
     used: set[str] = set()
-    # Explicitly prefer the most specific metrics first so a generic power
-    # sensor cannot steal a more appropriate import/export/solar source.
     for target in ("production", "import", "export", "consumption"):
         best = _Candidate()
         for state in states:
@@ -62,7 +82,7 @@ def _discover(hass: HomeAssistant) -> dict[str, str | None]:
             score = _score(state, TARGETS[target])
             if score > best.score or (score == best.score and best.entity_id and state.entity_id < best.entity_id):
                 best = _Candidate(state.entity_id, score)
-        result[target] = best.entity_id if best.score >= 10 else None
+        result[target] = best.entity_id if best.score >= 12 else None
         if result[target]:
             used.add(result[target])
     return result
@@ -105,7 +125,6 @@ class JarvisPowerSensor(SensorEntity):
         def _changed(_event) -> None:
             old_source = self._source
             self._refresh_source()
-            # Only publish when the selected source/value may have changed.
             if old_source != self._source or self._attr_native_value is not None:
                 self.async_write_ha_state()
 
@@ -134,7 +153,7 @@ class JarvisPowerSensor(SensorEntity):
                 "auto_discovered": True,
             }
             return
-        unit = str(state.attributes.get("unit_of_measurement", "W")).lower()
+        unit = _norm(state.attributes.get("unit_of_measurement", "W"))
         self._attr_native_value = value * 1000 if unit == "kw" else value
         self._attr_extra_state_attributes = {
             "source_entity": self._source,
