@@ -11,8 +11,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import DOMAIN
-
 @dataclass
 class _Candidate:
     entity_id: str | None = None
@@ -114,4 +112,4 @@ class JarvisPowerSensor(SensorEntity):
         self._attr_extra_state_attributes = {"source_entity": self._source, "auto_discovered": True}
 
     async def async_update(self) -> None:
-        self._refresh_source
+        self._refresh_source()
