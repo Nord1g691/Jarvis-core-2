@@ -3,19 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from homeassistant.components.frontend import (
-    add_extra_js_url,
-    async_register_built_in_panel,
-)
+from homeassistant.components.frontend import add_extra_js_url, async_register_built_in_panel
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
-
-FRONTEND_URL = "/jarvis_core"
-FRONTEND_FILE = f"{FRONTEND_URL}/jarvis-core.js"
-PANEL_URL = "jarvis"
+from .const import DOMAIN, FRONTEND_FILE, FRONTEND_URL, PANEL_URL
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -24,15 +17,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     frontend_dir = Path(__file__).parent / "frontend"
 
     await hass.http.async_register_static_paths(
-        [
-            StaticPathConfig(
-                FRONTEND_URL,
-                str(frontend_dir),
-                cache_headers=False,
-            )
-        ]
+        [StaticPathConfig(FRONTEND_URL, str(frontend_dir), cache_headers=False)]
     )
-
     add_extra_js_url(hass, FRONTEND_FILE)
 
     async_register_built_in_panel(
