@@ -1,7 +1,7 @@
 {
   "domain": "jarvis",
   "name": "JARVIS Core Assistant",
-  "version": "0.2.0-test.3",
+  "version": "0.2.0-test.4",
   "documentation": "https://github.com/Nord1g691/Jarvis-core-2",
   "issue_tracker": "https://github.com/Nord1g691/Jarvis-core-2/issues",
   "codeowners": ["@Nord1g691"],
